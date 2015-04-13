@@ -17,7 +17,7 @@ CPP = g++ -std=c++11 -Wall -Wextra -Werror -pedantic -pedantic-errors
 
 DIR = .
 
-NAMES = main
+NAMES = thresholds main
 OBJS = $(addsuffix .o,$(NAMES))
 BIN = zpo_projekt
 
