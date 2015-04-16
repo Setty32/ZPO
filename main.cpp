@@ -1,4 +1,3 @@
-
 #include<iostream>
 #include<string>
 #include<vector>
@@ -6,19 +5,6 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-
-/*
-Co jsem vymyslel po ceste
-
-delta of slices MUSIME mit jako float
-
-1) vyhlazeni floatu je lepsi
-2) nebudou tam osklive 1px skoky
-	cela cast delty je obycejne posunuti + 
-	desetinna je vahou interpolace mezi sousednimi pixely ve sloupci
-
-
-*/
 
 
 #define filter_size 13
@@ -41,12 +27,9 @@ void filter(std::vector<double> &input, std::vector<double> &output){
         double result = 0.0;
 
         for(int j = - filterHalf; j <= filterHalf; j++){
-<<<<<<< .mine
+
+
             if(((int)i + j) < 0){
-=======
-            // if((i + j) < 0){ // povodny riadok kt. sposoboval chybny make
-            if(((int)i + j) < 0){
->>>>>>> .r11
                 result += coeff[j + filterHalf] * (double)input.at(0);
             } else if( (i + j) >= input.size() - 5){
                 result += coeff[j + filterHalf] * (double)input.at(input.size() -5);
@@ -55,67 +38,11 @@ void filter(std::vector<double> &input, std::vector<double> &output){
             }
         }
         std::cerr<< input.at(i) <<" " <<  cvRound(result / weight_sum) << std::endl;
-        output.at(i) = cvRound(result / weight_sum);
+        output.at(i) = result / weight_sum;
 	}
 	
 }
 
-void histogramEqualization( const cv::Mat gray, cv::Mat& eq_gray )
-{
-	cv::Mat h = cv::Mat::zeros( 1, 256, CV_32SC1 );
-	eq_gray   = cv::Mat::zeros(gray.size(), CV_8UC1 );
-
-	// pzu
-    for(int i = 0; i < gray.rows; i++){
-        for(int j = 0; j < gray.cols; j++){
-
-            int index = gray.at<unsigned char>(i, j);
-            h.at<unsigned int>(0, index) = h.at<unsigned int>(0, index) + 1;
-
-        }
-
-    }
-
-
-	// spoakumulovanĂ˝ histogram
-	// hodnota v akumulovanĂŠm histogramu pro danou intensitu je rovna souu vĹĄech hodnot histogramu s niĹžĹĄĂ intenzitami.
-    cv::Mat h_acc = cv::Mat::zeros( 1, 256, CV_32SC1 );
-
-
-    h_acc.at<unsigned int>(0, 0) = h.at<unsigned int>(0, 0);
-
-    for(int i = 1; i < h.cols; i++){
-        h_acc.at<unsigned int>(0, i) = h_acc.at<unsigned int>(0, i - 1) + h.at<unsigned int>(0, i);
-    }
-
-
-
-    double scale_factor = cv::saturate_cast<double>(255.0f / (float)(gray.cols * gray.rows));
-
-    //normalize h_acc
-    for(int i = 0; i < h.cols; i++){
-
-        h_acc.at<unsigned int>(0, i) = cv::saturate_cast<unsigned int>(cv::saturate_cast<double>(h_acc.at<unsigned int>(0, i) * scale_factor));
-
-    }
-
-	// p
-    for(int i = 0; i < gray.rows; i++){
-        for(int j = 0; j < gray.cols; j++){
-
-            int index = gray.at<unsigned char>(i, j);
-
-            unsigned char value = h_acc.at<unsigned int>(index);
-
-            eq_gray.at<unsigned char>(i, j) = value;
-
-
-        }
-    }
-
-
-	return;
-}
 
 // http://geomalgorithms.com/a02-_lines.html
 #define dot(u,v)   ((u).x * (v).x + (u).y * (v).y)
@@ -170,15 +97,13 @@ int main(int argc, char* argv[]){
 
     cerr<< "Input img sizes: " << src.cols << " " << src.rows << endl;
 	cv::Mat assist;
-	cv::Mat src_gray, src_gray_tmp;
+        cv::Mat src_gray;
 	cv::cvtColor( src, src_gray, CV_BGR2GRAY );
-	cv::cvtColor( src, src_gray_tmp, CV_BGR2GRAY );
+
 
 	cv::Mat dst=cv::Mat::zeros(src_gray.size(),src_gray.type());
 	cv::Mat finalResult = cv::Mat::zeros(src_gray.size(),src_gray.type());
 	
-	//histogramEqualization(src_gray_tmp, src_gray);		//moc nepomaha
-
 
 	cv::threshold(src_gray,dst,200,255,cv::THRESH_TOZERO);		//JEDEN PARAMETR == PRAH
 	
@@ -293,17 +218,39 @@ int main(int argc, char* argv[]){
 						
 						int src_X = slice + minX;
 						int height = maxY - minY;
-						
+                                                float fraction = newDeltaSlice.at(slice);
+
+                                                int wholePart = (int) fraction;
+                                                fraction = abs(fraction - wholePart);
+                                                float complement = 1 - fraction;
+
+                                                //cout << newDeltaSlice.at(slice) << " "<< wholePart <<" "<< fraction << " " << complement << endl;
 						for(int offset = 0; offset < height; offset++){
-							//above line
-                            if(newDeltaSlice.at(slice) > 0){
-                                src_gray.at<uchar>(maxY + round(newDeltaSlice.at(slice)) - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
-							
-							//below line
-                            } else if (newDeltaSlice.at(slice) < 0){
-                                src_gray.at<uchar>(minY + round(newDeltaSlice.at(slice)) + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
-                            }
-						}	
+
+                                                    //above line
+                                                    if(wholePart > 0){
+                                                        src_gray.at<uchar>(maxY + wholePart - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
+
+                                                     //below line
+                                                    } else if (wholePart < 0){
+                                                        src_gray.at<uchar>(minY + wholePart + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
+                                                    }
+
+                                                }
+
+                                                //go through slice once again and fine adjust values..
+                                                for(int offset = 0; offset < height; offset++){
+
+                                                    //above line
+                                                    if(wholePart > 0){
+                                                        src_gray.at<uchar>(maxY - offset, src_X) = (uchar)(complement * src_gray.at<uchar>(maxY - offset, src_X) + fraction * src_gray.at<uchar>(maxY - offset - 1, src_X));
+
+                                                     //below line
+                                                    } else if (wholePart < 0){
+                                                        src_gray.at<uchar>(minY + offset, src_X) = (uchar)(complement * src_gray.at<uchar>(minY + offset, src_X) + fraction * src_gray.at<uchar>(minY + offset + 1, src_X));
+                                                    }
+
+                                                }
 					}
 //				}
 //                cerr << delta_of_slice.at(slice) << endl;
@@ -314,8 +261,8 @@ int main(int argc, char* argv[]){
             cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
 		
 		//cv::imshow("dst",hough); 
-		cv::imshow("draw",draw);
-		cv::waitKey(0);	
+                //cv::imshow("draw",draw);
+                //cv::waitKey(0);
 
 		}
 		
