@@ -6,6 +6,21 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+
+/*
+Co jsem vymyslel po ceste
+
+delta of slices MUSIME mit jako float
+
+1) vyhlazeni floatu je lepsi
+2) nebudou tam osklive 1px skoky
+	cela cast delty je obycejne posunuti + 
+	desetinna je vahou interpolace mezi sousednimi pixely ve sloupci
+
+
+*/
+
+
 #define filter_size 3
 
 //sice vyfiltruje trochu sumu, ale pak pokud se neco prudceji zmeni
