@@ -21,31 +21,35 @@ delta of slices MUSIME mit jako float
 */
 
 
-#define filter_size 7
+#define filter_size 13
 
 //sice vyfiltruje trochu sumu, ale pak pokud se neco prudceji zmeni
 //tak chvili drzi a je tam patrny zlom..
-void filter(std::vector<int> &input, std::vector<int> &output){
+void filter(std::vector<double> &input, std::vector<double> &output){
 	
-    double coeff[filter_size] = {0.1, 0.2, 0.5, 0.5, 0.5, 0.2, 0.1};
+    double coeff[filter_size] = { 0.5, 0.5, 0.8, 0.8, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8, 0.8, 0.5, 0.5};
 	
     double weight_sum = 0;
 	for(int i = 0; i < filter_size; i++){
 		weight_sum += coeff[i];
 	}
 	
-    int filterHalf = 3;
+    int filterHalf = 6;
 	
 	for(unsigned i = 0; i < input.size(); i++){
 		
         double result = 0.0;
 
         for(int j = - filterHalf; j <= filterHalf; j++){
+<<<<<<< .mine
+            if(((int)i + j) < 0){
+=======
             // if((i + j) < 0){ // povodny riadok kt. sposoboval chybny make
             if(((int)i + j) < 0){
+>>>>>>> .r11
                 result += coeff[j + filterHalf] * (double)input.at(0);
-            } else if( (i + j) >= input.size()){
-                result += coeff[j + filterHalf] * (double)input.at(input.size() -1);
+            } else if( (i + j) >= input.size() - 5){
+                result += coeff[j + filterHalf] * (double)input.at(input.size() -5);
             } else {
                 result += coeff[j + filterHalf] * (double)input.at(i + j);
             }
@@ -234,7 +238,7 @@ int main(int argc, char* argv[]){
 			maxY += cushion;
 			
 			vector<vector<int> > points_in_slices;
-			vector<int> delta_of_slice;
+            vector<double> delta_of_slice;
 			points_in_slices.resize(maxX - minX);
 			delta_of_slice.resize(maxX - minX);
 			
@@ -278,7 +282,7 @@ int main(int argc, char* argv[]){
 				} //for points in slices
             }
 
-            vector<int> newDeltaSlice(delta_of_slice.size());
+            vector<double> newDeltaSlice(delta_of_slice.size());
             filter(delta_of_slice,newDeltaSlice);
             for(int slice = 5; slice < maxX - minX; slice++){
 //				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){
@@ -293,11 +297,11 @@ int main(int argc, char* argv[]){
 						for(int offset = 0; offset < height; offset++){
 							//above line
                             if(newDeltaSlice.at(slice) > 0){
-                                src_gray.at<uchar>(maxY + newDeltaSlice.at(slice) - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
+                                src_gray.at<uchar>(maxY + round(newDeltaSlice.at(slice)) - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
 							
 							//below line
                             } else if (newDeltaSlice.at(slice) < 0){
-                                src_gray.at<uchar>(minY + newDeltaSlice.at(slice) + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
+                                src_gray.at<uchar>(minY + round(newDeltaSlice.at(slice)) + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
                             }
 						}	
 					}
