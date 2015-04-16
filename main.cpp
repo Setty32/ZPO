@@ -1,3 +1,4 @@
+
 #include<iostream>
 #include<string>
 #include<vector>
@@ -5,6 +6,91 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#define filter_size 3
+
+//sice vyfiltruje trochu sumu, ale pak pokud se neco prudceji zmeni
+//tak chvili drzi a je tam patrny zlom..
+void filter(std::vector<int> &input){
+	
+	float coeff[filter_size] = {1.0, 0.9, 0.4};
+	
+	float weight_sum = 0;
+	for(int i = 0; i < filter_size; i++){
+		weight_sum += coeff[i];
+	}
+	
+	
+	
+	for(unsigned i = 0; i < input.size(); i++){
+		
+		float result = 0.0;
+		
+		if(i >= filter_size - 1){
+			for(int j = 0; j < filter_size; j++){
+				result += coeff[j] * input.at(i - j);
+			}
+			input.at(i) = cvRound(result / weight_sum);
+		}
+	}
+	
+}
+
+void histogramEqualization( const cv::Mat gray, cv::Mat& eq_gray )
+{
+	cv::Mat h = cv::Mat::zeros( 1, 256, CV_32SC1 );
+	eq_gray   = cv::Mat::zeros(gray.size(), CV_8UC1 );
+
+	// pzu
+    for(int i = 0; i < gray.rows; i++){
+        for(int j = 0; j < gray.cols; j++){
+
+            int index = gray.at<unsigned char>(i, j);
+            h.at<unsigned int>(0, index) = h.at<unsigned int>(0, index) + 1;
+
+        }
+
+    }
+
+
+	// spoakumulovanĂ˝ histogram
+	// hodnota v akumulovanĂŠm histogramu pro danou intensitu je rovna souu vĹĄech hodnot histogramu s niĹžĹĄĂ intenzitami.
+    cv::Mat h_acc = cv::Mat::zeros( 1, 256, CV_32SC1 );
+
+
+    h_acc.at<unsigned int>(0, 0) = h.at<unsigned int>(0, 0);
+
+    for(int i = 1; i < h.cols; i++){
+        h_acc.at<unsigned int>(0, i) = h_acc.at<unsigned int>(0, i - 1) + h.at<unsigned int>(0, i);
+    }
+
+
+
+    double scale_factor = cv::saturate_cast<double>(255.0f / (float)(gray.cols * gray.rows));
+
+    //normalize h_acc
+    for(int i = 0; i < h.cols; i++){
+
+        h_acc.at<unsigned int>(0, i) = cv::saturate_cast<unsigned int>(cv::saturate_cast<double>(h_acc.at<unsigned int>(0, i) * scale_factor));
+
+    }
+
+	// p
+    for(int i = 0; i < gray.rows; i++){
+        for(int j = 0; j < gray.cols; j++){
+
+            int index = gray.at<unsigned char>(i, j);
+
+            unsigned char value = h_acc.at<unsigned int>(index);
+
+            eq_gray.at<unsigned char>(i, j) = value;
+
+
+        }
+    }
+
+
+	return;
+}
 
 // http://geomalgorithms.com/a02-_lines.html
 #define dot(u,v)   ((u).x * (v).x + (u).y * (v).y)
@@ -25,6 +111,7 @@ double dist_Point_to_Line( cv::Point P, cv::Point L1, cv::Point L2)
      else
 		return -d(P,Pb);
 }
+
 
 //#include "thresholds.h"
 
@@ -56,11 +143,15 @@ int main(int argc, char* argv[]){
 
 	cv::Mat src = cv::imread( inFile );
 	cv::Mat assist;
-	cv::Mat src_gray;
+	cv::Mat src_gray, src_gray_tmp;
 	cv::cvtColor( src, src_gray, CV_BGR2GRAY );
+	cv::cvtColor( src, src_gray_tmp, CV_BGR2GRAY );
 
 	cv::Mat dst=cv::Mat::zeros(src_gray.size(),src_gray.type());
 	cv::Mat finalResult = cv::Mat::zeros(src_gray.size(),src_gray.type());
+	
+	//histogramEqualization(src_gray_tmp, src_gray);		//moc nepomaha
+
 
 	cv::threshold(src_gray,dst,200,255,cv::THRESH_TOZERO);		//JEDEN PARAMETR == PRAH
 	
@@ -157,16 +248,13 @@ int main(int argc, char* argv[]){
 							delta_of_slice.at(slice) = m;
 							minDistance = m;
 						}
-					}
-					//z pt1 a pt2 --->
-					/*int distance = minDistance, linePointDistance(points_in_slices.at(sloupec).at(chn), --------);
+						
+					}//for lines
+		
 					
-					if(abs(distance) < minDistance){
-					 closest = chn;
-					 delta_of_slice[sloupec] = distance;
-					}*/
-					
-				}
+				} //for points in slices
+				
+				filter(delta_of_slice);
 				
 				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){
 					if(abs(delta_of_slice.at(slice)) > 1){
@@ -191,22 +279,28 @@ int main(int argc, char* argv[]){
 					}
 				}
 				cerr << delta_of_slice.at(slice) << endl;
-			}
+				
+			} // for all slices
+			
 				cerr << "------------------------" << endl;
 			cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
 		
 		//cv::imshow("dst",hough); 
-		//cv::imshow("draw",draw);
-		//cv::waitKey(0);	
+		cv::imshow("draw",draw);
+		cv::waitKey(0);	
 
 		}
 		
-	}
+	} //for all contours
+	
+	
+	
 	draw = cv::Mat::zeros(dst.size(),CV_8UC3);
 	for(unsigned i = 0; i < contours.size(); i++){
 		if(contours.at(i).size() > 740 /*threshold*/)
 		cv::drawContours( src_gray, contours, i, cv::Scalar(0,0,255));
 	}
+	
 	//cv::imshow("draw",draw);
 			cv::imshow("dst",src_gray);
 		cv::waitKey(0);
