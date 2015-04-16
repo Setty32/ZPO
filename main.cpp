@@ -41,7 +41,8 @@ void filter(std::vector<int> &input, std::vector<int> &output){
         double result = 0.0;
 
         for(int j = - filterHalf; j <= filterHalf; j++){
-            if((i + j) < 0){
+            // if((i + j) < 0){ // povodny riadok kt. sposoboval chybny make
+            if(((int)i + j) < 0){
                 result += coeff[j + filterHalf] * (double)input.at(0);
             } else if( (i + j) >= input.size()){
                 result += coeff[j + filterHalf] * (double)input.at(input.size() -1);
