@@ -65,7 +65,6 @@ double dist_Point_to_Line( cv::Point P, cv::Point L1, cv::Point L2)
 }
 
 
-//#include "thresholds.h"
 
 using namespace std;
 
@@ -218,39 +217,46 @@ int main(int argc, char* argv[]){
 						
 						int src_X = slice + minX;
 						int height = maxY - minY;
-                                                float fraction = newDeltaSlice.at(slice);
 
-                                                int wholePart = (int) fraction;
-                                                fraction = abs(fraction - wholePart);
-                                                float complement = 1 - fraction;
+                        float delta = newDeltaSlice.at(slice);
+                        float fraction = newDeltaSlice.at(slice);
+                        int wholePart = (int) fraction;
+                        fraction = abs(fraction - wholePart);
+                        float complement = 1 - fraction;
 
-                                                //cout << newDeltaSlice.at(slice) << " "<< wholePart <<" "<< fraction << " " << complement << endl;
+                        //cout << newDeltaSlice.at(slice) << " "<< wholePart <<" "<< fraction << " " << complement << endl;
 						for(int offset = 0; offset < height; offset++){
 
-                                                    //above line
-                                                    if(wholePart > 0){
-                                                        src_gray.at<uchar>(maxY + wholePart - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
+                            //above line
+                            if(delta > 0){
+                                src_gray.at<uchar>(maxY + wholePart - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
 
-                                                     //below line
-                                                    } else if (wholePart < 0){
-                                                        src_gray.at<uchar>(minY + wholePart + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
-                                                    }
+                             //below line
+                            } else if (delta < 0){
+                                src_gray.at<uchar>(minY + wholePart + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
+                            }
 
-                                                }
+                        }
 
-                                                //go through slice once again and fine adjust values..
-                                                for(int offset = 0; offset < height; offset++){
+                        //go through slice once again and fine adjust values..
+                        for(int offset = 0; offset < height; offset++){
 
-                                                    //above line
-                                                    if(wholePart > 0){
-                                                        src_gray.at<uchar>(maxY - offset, src_X) = (uchar)(complement * src_gray.at<uchar>(maxY - offset, src_X) + fraction * src_gray.at<uchar>(maxY - offset - 1, src_X));
+                            //above line
+                            if(delta > 0){
+                                float v1 = complement * src_gray.at<uchar>(maxY - offset, src_X);
+                                float v2 = fraction * src_gray.at<uchar>(maxY - offset - 1, src_X);
+                                float value = v1 + v2;
+                                src_gray.at<uchar>(maxY - offset, src_X) = (uchar) value;
 
-                                                     //below line
-                                                    } else if (wholePart < 0){
-                                                        src_gray.at<uchar>(minY + offset, src_X) = (uchar)(complement * src_gray.at<uchar>(minY + offset, src_X) + fraction * src_gray.at<uchar>(minY + offset + 1, src_X));
-                                                    }
+                             //below line
+                            } else if (delta < 0){
+                                float v1 = complement * src_gray.at<uchar>(minY + offset, src_X);
+                                float v2 =  fraction * src_gray.at<uchar>(minY + offset + 1, src_X);
+                                float value = v1 + v2;
+                                src_gray.at<uchar>(minY + offset, src_X) = (uchar) value;
+                            }
 
-                                                }
+                        }
 					}
 //				}
 //                cerr << delta_of_slice.at(slice) << endl;
