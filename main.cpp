@@ -21,31 +21,36 @@ delta of slices MUSIME mit jako float
 */
 
 
-#define filter_size 3
+#define filter_size 7
 
 //sice vyfiltruje trochu sumu, ale pak pokud se neco prudceji zmeni
 //tak chvili drzi a je tam patrny zlom..
-void filter(std::vector<int> &input){
+void filter(std::vector<int> &input, std::vector<int> &output){
 	
-	float coeff[filter_size] = {1.0, 0.9, 0.4};
+    double coeff[filter_size] = {0.1, 0.2, 0.5, 0.5, 0.5, 0.2, 0.1};
 	
-	float weight_sum = 0;
+    double weight_sum = 0;
 	for(int i = 0; i < filter_size; i++){
 		weight_sum += coeff[i];
 	}
 	
-	
+    int filterHalf = 3;
 	
 	for(unsigned i = 0; i < input.size(); i++){
 		
-		float result = 0.0;
-		
-		if(i >= filter_size - 1){
-			for(int j = 0; j < filter_size; j++){
-				result += coeff[j] * input.at(i - j);
-			}
-			input.at(i) = cvRound(result / weight_sum);
-		}
+        double result = 0.0;
+
+        for(int j = - filterHalf; j <= filterHalf; j++){
+            if((i + j) < 0){
+                result += coeff[j + filterHalf] * (double)input.at(0);
+            } else if( (i + j) >= input.size()){
+                result += coeff[j + filterHalf] * (double)input.at(input.size() -1);
+            } else {
+                result += coeff[j + filterHalf] * (double)input.at(i + j);
+            }
+        }
+        std::cerr<< input.at(i) <<" " <<  cvRound(result / weight_sum) << std::endl;
+        output.at(i) = cvRound(result / weight_sum);
 	}
 	
 }
@@ -156,7 +161,9 @@ int main(int argc, char* argv[]){
 	if( argc > 1 ) inFile = std::string( argv[1] );
 	if( argc > 2 ) outFile = std::string( argv[2] );
 
-	cv::Mat src = cv::imread( inFile );
+    cv::Mat src = cv::imread( inFile, CV_LOAD_IMAGE_COLOR);
+
+    cerr<< "Input img sizes: " << src.cols << " " << src.rows << endl;
 	cv::Mat assist;
 	cv::Mat src_gray, src_gray_tmp;
 	cv::cvtColor( src, src_gray, CV_BGR2GRAY );
@@ -268,37 +275,38 @@ int main(int argc, char* argv[]){
 		
 					
 				} //for points in slices
-				
-				filter(delta_of_slice);
-				
-				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){
-					if(abs(delta_of_slice.at(slice)) > 1){
+            }
+
+            vector<int> newDeltaSlice(delta_of_slice.size());
+            filter(delta_of_slice,newDeltaSlice);
+            for(int slice = 5; slice < maxX - minX; slice++){
+//				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){
+                    if(abs(newDeltaSlice.at(slice)) > 0){
 						//vizualizace opravenych kontur
-						unsigned contourPoint = points_in_slices.at(slice).at(point);
-						contours.at(i).at(contourPoint).y += delta_of_slice.at(slice);
+//						unsigned contourPoint = points_in_slices.at(slice).at(point);
+//                        contours.at(i).at(contourPoint).y += newDeltaSlice.at(slice);
 						
 						int src_X = slice + minX;
 						int height = maxY - minY;
 						
 						for(int offset = 0; offset < height; offset++){
-							
 							//above line
-							if(delta_of_slice.at(slice) > 1){
-								src_gray.at<uchar>(maxY + delta_of_slice.at(slice) - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
+                            if(newDeltaSlice.at(slice) > 0){
+                                src_gray.at<uchar>(maxY + newDeltaSlice.at(slice) - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
 							
 							//below line
-							} else if (delta_of_slice.at(slice) < -1){
-								src_gray.at<uchar>(minY - delta_of_slice.at(slice) + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
-								}
+                            } else if (newDeltaSlice.at(slice) < 0){
+                                src_gray.at<uchar>(minY + newDeltaSlice.at(slice) + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
+                            }
 						}	
 					}
-				}
-				cerr << delta_of_slice.at(slice) << endl;
+//				}
+//                cerr << delta_of_slice.at(slice) << endl;
 				
 			} // for all slices
 			
-				cerr << "------------------------" << endl;
-			cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
+                cerr << "------------------------" << endl;
+            cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
 		
 		//cv::imshow("dst",hough); 
 		cv::imshow("draw",draw);
@@ -310,11 +318,11 @@ int main(int argc, char* argv[]){
 	
 	
 	
-	draw = cv::Mat::zeros(dst.size(),CV_8UC3);
-	for(unsigned i = 0; i < contours.size(); i++){
-		if(contours.at(i).size() > 740 /*threshold*/)
-		cv::drawContours( src_gray, contours, i, cv::Scalar(0,0,255));
-	}
+//	draw = cv::Mat::zeros(dst.size(),CV_8UC3);
+//	for(unsigned i = 0; i < contours.size(); i++){
+//		if(contours.at(i).size() > 740 /*threshold*/)
+//		cv::drawContours( src_gray, contours, i, cv::Scalar(0,0,255));
+//	}
 	
 	//cv::imshow("draw",draw);
 			cv::imshow("dst",src_gray);
