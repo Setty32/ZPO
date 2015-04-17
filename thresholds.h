@@ -1,3 +1,6 @@
+#ifndef THRESHOLDS_H_
+#define THRESHOLDS_H_
+
 #include <vector>
 #include <cmath>
 
@@ -8,3 +11,5 @@ using namespace std;
 
 unsigned getThreshold(vector<vector<cv::Point>> &input);
 unsigned getThreshold2(vector<vector<cv::Point>> &input);
+
+#endif
