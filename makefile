@@ -30,9 +30,9 @@ ifeq ($(OS), Windows_NT)
   LIBDIR =
   LINKDIR =
 else
-  INCDIR = -I/usr/local/include
+  INCDIR = `pkg-config --cflags opencv`
   LIBDIR = -L
-  LINKDIR = -lopencv_core -lopencv_imgproc -lopencv_highgui
+  LINKDIR = `pkg-config --libs opencv`
 endif
 
 # directory structure written here is expected to be present in the project dir
