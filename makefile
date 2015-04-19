@@ -2,8 +2,8 @@
 #
 # Project name: zpo_projekt
 # File name:    Makefile
-# Author:       Pavol Eldes
-# Login:        xeldes00
+# Author:       Pavol Eldes, Vit Hodes, Vojtech Kaisler
+# Login:        xeldes00, xhodes00, xkaisl00
 #
 ################################################################################
 
@@ -17,7 +17,7 @@ CPP = g++ -std=c++11 -Wall -Wextra -Werror -pedantic -pedantic-errors
 
 DIR = .
 
-NAMES = thresholds main
+NAMES = lines thresholds main
 OBJS = $(addsuffix .o,$(NAMES))
 BIN = zpo_projekt
 

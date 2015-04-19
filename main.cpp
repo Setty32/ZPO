@@ -5,7 +5,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-
+#include "thresholds.h"
+#include "lines.h"
 
 #define filter_size 13
 
@@ -67,8 +68,8 @@ double dist_Point_to_Line( cv::Point P, cv::Point L1, cv::Point L2)
 
 
 using namespace std;
-
-void minMax(vector<cv::Point> &in, int &minX, int &maxX, int &minY, int &maxY){
+// PRESUNUL SOM DO LINES.CPP, POUZIL SOM TIEZ
+/*void minMax(vector<cv::Point> &in, int &minX, int &maxX, int &minY, int &maxY){
 	minX = INT_MAX;
 	maxX = INT_MIN;
 	minY = INT_MAX;
@@ -83,7 +84,7 @@ void minMax(vector<cv::Point> &in, int &minX, int &maxX, int &minY, int &maxY){
 		maxY = max(in.at(i).y, maxY);
 	}
 	
-}
+}*/
 
 int main(int argc, char* argv[]){
 	string inFile = "";
@@ -118,10 +119,11 @@ int main(int argc, char* argv[]){
 	
 	vector<cv::Point3d> direct;
 	int cushion = 3; //manipulation space
-//	unsigned threshold = getThreshold2(contours);
+	unsigned threshold = getThreshold3(contours, 4); // we want at least 5 contours so we ignore 4 thresholds
 
 	for(unsigned i = 0; i < contours.size(); i++){
-		if(contours.at(i).size() > 740 /*threshold*/){
+		//if(contours.at(i).size() > 740 /*threshold*/){
+		if(contours.at(i).size() > threshold){
 			draw = cv::Mat::zeros(dst.size(),CV_8UC3);
 	        cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
 	        
@@ -133,9 +135,14 @@ int main(int argc, char* argv[]){
 			vector<cv::Vec2f> lines;
 			cv::HoughLines(hough,lines, 1, CV_PI/360, 250, 0, 0);	//JEDEN PARAMETR == PRAH
 			draw = cv::Mat::zeros(dst.size(),CV_8UC3);
-			  for( size_t j = 0; j < lines.size(); j++ )
+
+			std::vector<int> goodLines = validLines(contours[i], lines); // FUNKCIA NA VYBER INDEXOV TYCH NAJ LINII
+
+			  //for( size_t j = 0; j < lines.size(); j++ ) // POVODNE
+			  for (std::vector<int>::iterator it = goodLines.begin(); it != goodLines.end(); ++it)
 			  {
-				float rho = lines[j][0], theta = lines[j][1];
+				//float rho = lines[j][0], theta = lines[j][1]; // POVODNE
+				float rho = lines[*it][0], theta = lines[*it][1];
 				cv::Point pt1, pt2;
 				double a = cos(theta), b = sin(theta);
 				double x0 = a*rho, y0 = b*rho;
@@ -179,8 +186,10 @@ int main(int argc, char* argv[]){
 				int minDistance = INT_MAX;
 				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){
 					
-					for(unsigned vec = 0; vec < lines.size(); vec++){
-						double rho = lines[vec][0], theta = lines[vec][1];
+					//for(unsigned vec = 0; vec < lines.size(); vec++){ // POVODNE
+			  	for (std::vector<int>::iterator it = goodLines.begin(); it != goodLines.end(); ++it){
+						//double rho = lines[vec][0], theta = lines[vec][1]; // POVODNE
+						double rho = lines[*it][0], theta = lines[*it][1];
 						double a = cos(theta), b = sin(theta);
 						double x0 = a*rho, y0 = b*rho;
 						
