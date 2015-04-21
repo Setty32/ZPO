@@ -1,12 +1,16 @@
 #include<iostream>
 #include<string>
 #include<vector>
+#include <sys/stat.h>
 
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
-
 #include "thresholds.h"
 #include "lines.h"
+
+//use this to build for presentation..
+#define DEMO
+
 
 #define filter_size 13
 
@@ -68,23 +72,7 @@ double dist_Point_to_Line( cv::Point P, cv::Point L1, cv::Point L2)
 
 
 using namespace std;
-// PRESUNUL SOM DO LINES.CPP, POUZIL SOM TIEZ
-/*void minMax(vector<cv::Point> &in, int &minX, int &maxX, int &minY, int &maxY){
-	minX = INT_MAX;
-	maxX = INT_MIN;
-	minY = INT_MAX;
-	maxY = INT_MIN;
-	
-	
-	for(unsigned i = 0; i < in.size(); i++){
-		minX = min(in.at(i).x, minX);
-		maxX = max(in.at(i).x, maxX);
-		
-		minY = min(in.at(i).y, minY);
-		maxY = max(in.at(i).y, maxY);
-	}
-	
-}*/
+
 
 int main(int argc, char* argv[]){
 	string inFile = "";
@@ -93,23 +81,37 @@ int main(int argc, char* argv[]){
 	if( argc > 1 ) inFile = std::string( argv[1] );
 	if( argc > 2 ) outFile = std::string( argv[2] );
 
+    if(argc == 1){
+        cout << "need at least input file\n";
+        return 1;
+    }
+
+    const int dir_err = mkdir("./out", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    if (-1 == dir_err)
+    {
+        printf("Error creating directory!n");
+        exit(1);
+    }
+
     cv::Mat src = cv::imread( inFile, CV_LOAD_IMAGE_COLOR);
 
     cerr<< "Input img sizes: " << src.cols << " " << src.rows << endl;
-	cv::Mat assist;
-        cv::Mat src_gray;
+
+    //convert input file to greyscale
+    cv::Mat src_gray;
 	cv::cvtColor( src, src_gray, CV_BGR2GRAY );
 
-
-	cv::Mat dst=cv::Mat::zeros(src_gray.size(),src_gray.type());
-	cv::Mat finalResult = cv::Mat::zeros(src_gray.size(),src_gray.type());
+    cv::Mat dst = cv::Mat::zeros(src_gray.size(),src_gray.type());
 	
 
+    //isolate white areas; dst is binary image now
 	cv::threshold(src_gray,dst,200,255,cv::THRESH_TOZERO);		//JEDEN PARAMETR == PRAH
 	
+
 	vector<vector<cv::Point> > contours;
 	vector<cv::Vec4i> hierarchy;
 
+    //find contours of these areas and only outer ones (no inner contours). Stored as points.
 	cv::findContours(dst, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE,cv::Point(0,0));
 
 	cv::Mat draw = cv::Mat::zeros(dst.size(),CV_8UC3);
@@ -117,169 +119,190 @@ int main(int argc, char* argv[]){
 //	cerr << contours.size() << endl;
 	
 	
-	vector<cv::Point3d> direct;
-	int cushion = 3; //manipulation space
-	unsigned threshold = getThreshold3(contours, 4); // we want at least 5 contours so we ignore 4 thresholds
+    int cushion = 3;    //manipulation space to add to bounding box
+
+    //want to keep 5 biggest contours by point count and cut off everything else..
+    unsigned threshold = getThreshold3(contours, 4);
+
 
 	for(unsigned i = 0; i < contours.size(); i++){
-		//if(contours.at(i).size() > 740 /*threshold*/){
-		if(contours.at(i).size() > threshold){
-			draw = cv::Mat::zeros(dst.size(),CV_8UC3);
-	        cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
-	        
-	        cv::Mat hough;
-			cv::cvtColor( draw, hough, CV_BGR2GRAY );
-//	draw.convertTo(hough,CV_8UC1);
-			bool stop = true;
-			
-			vector<cv::Vec2f> lines;
-			cv::HoughLines(hough,lines, 1, CV_PI/360, 250, 0, 0);	//JEDEN PARAMETR == PRAH
-			draw = cv::Mat::zeros(dst.size(),CV_8UC3);
 
-			std::vector<int> goodLines = validLines(contours[i], lines); // FUNKCIA NA VYBER INDEXOV TYCH NAJ LINII
+        //so here we use only those 5 biggest ones
+        if(contours.at(i).size() < threshold)
+            continue;
 
-			  //for( size_t j = 0; j < lines.size(); j++ ) // POVODNE
-			  for (std::vector<int>::iterator it = goodLines.begin(); it != goodLines.end(); ++it)
-			  {
-				//float rho = lines[j][0], theta = lines[j][1]; // POVODNE
-				float rho = lines[*it][0], theta = lines[*it][1];
-				cv::Point pt1, pt2;
-				double a = cos(theta), b = sin(theta);
-				double x0 = a*rho, y0 = b*rho;
-				pt1.x = cvRound(x0 + 1000*(-b));
-				pt1.y = cvRound(y0 + 1000*(a));
-				pt2.x = cvRound(x0 - 1000*(-b));
-				pt2.y = cvRound(y0 - 1000*(a));
-				
-				if (a < 0.5 && y0 > hough.rows * 0.1 && y0 < hough.rows * 0.9){
-					cv::line( draw, pt1, pt2, cv::Scalar(255,255,0), 1, CV_AA);
-					stop = false;
-			 }
-			  } //for lines
-			  
-			if(lines.size() < 1 || stop){
-				continue;
-			}
-			int maxX, minX, minY, maxY;
-			minMax(contours.at(i), minX, maxX, minY, maxY);
-			
-			minX -= cushion;
-			maxX += cushion;
-			minY -= cushion;
-			maxY += cushion;
-			
-			vector<vector<int> > points_in_slices;
-            vector<double> delta_of_slice;
-			points_in_slices.resize(maxX - minX);
-			delta_of_slice.resize(maxX - minX);
-			
-			for(unsigned j = 0; j < contours.at(i).size(); j++){
-				
-				points_in_slices.at(contours.at(i).at(j).x - minX).push_back(j);
-				
-			}
-			
-			
-			//process one field by vertical slices
-			for(int slice = 5; slice < maxX - minX; slice++){
-				
-				int minDistance = INT_MAX;
-				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){
-					
-					//for(unsigned vec = 0; vec < lines.size(); vec++){ // POVODNE
-			  	for (std::vector<int>::iterator it = goodLines.begin(); it != goodLines.end(); ++it){
-						//double rho = lines[vec][0], theta = lines[vec][1]; // POVODNE
-						double rho = lines[*it][0], theta = lines[*it][1];
-						double a = cos(theta), b = sin(theta);
-						double x0 = a*rho, y0 = b*rho;
-						
-						//contours.at(i).at(contourPoint).x - x0 / -b = k;
-						//y = y0 + k *(a);
-						
-						unsigned contourPoint = points_in_slices.at(slice).at(point);
-						//double m = dist_Point_to_Line(contours.at(i).at(contourPoint),cv::Point(cvRound(x0 - 1000*(-b)),cvRound(y0 - 1000*(a))), cv::Point(cvRound(x0 + 1500*(-b)),cvRound(y0 + 1500*(a))));
-						
-						double k = (contours.at(i).at(contourPoint).x - x0) / -b;
-						double y = y0 + k * a;
-						
-						double m = y - contours.at(i).at(contourPoint).y;
-						
-						if(abs(m) < abs(minDistance)){
-							delta_of_slice.at(slice) = m;
-							minDistance = m;
-						}
-						
-					}//for lines
-		
-					
-				} //for points in slices
+
+        draw = cv::Mat::zeros(dst.size(),CV_8UC3);
+        cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
+
+        //imshow draw
+
+        cv::Mat hough;
+        cv::cvtColor( draw, hough, CV_BGR2GRAY );
+
+        bool stop = true;
+
+        vector<cv::Vec2f> lines;
+        cv::HoughLines(hough,lines, 1, CV_PI/360, 250, 0, 0);	//JEDEN PARAMETR == PRAH
+        draw = cv::Mat::zeros(dst.size(),CV_8UC3);
+
+        //in case of multiple detected lines for any contour, select only the "best ones"
+        std::vector<int> goodLines = validLines(contours[i], lines);
+
+        for (auto it = goodLines.begin(); it != goodLines.end(); ++it){
+
+            float rho = lines[*it][0], theta = lines[*it][1];
+            cv::Point pt1, pt2;
+            double a = cos(theta), b = sin(theta);
+            double x0 = a*rho, y0 = b*rho;
+            pt1.x = cvRound(x0 + 1000*(-b));
+            pt1.y = cvRound(y0 + 1000*(a));
+            pt2.x = cvRound(x0 - 1000*(-b));
+            pt2.y = cvRound(y0 - 1000*(a));
+
+            //filters out fields with lines with more than 45 deg inclination and at top and bottmo 10% of space
+            //probably not really needed anymore..
+            if (a < 0.5 && y0 > hough.rows * 0.1 && y0 < hough.rows * 0.9){
+                cv::line( draw, pt1, pt2, cv::Scalar(255,255,0), 1, CV_AA);
+                stop = false;
             }
+        } //for lines
 
-            vector<double> newDeltaSlice(delta_of_slice.size());
-            filter(delta_of_slice,newDeltaSlice);
-            for(int slice = 5; slice < maxX - minX; slice++){
-//				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){
-                    if(abs(newDeltaSlice.at(slice)) > 0){
-						//vizualizace opravenych kontur
+        //if no lines or unfit go on.. - again not really necessary now
+        if(lines.size() < 1 || stop)
+            continue;
+
+
+
+        //find out bounding box of contour and inflate it a bit
+        int maxX, minX, minY, maxY;
+        minMax(contours.at(i), minX, maxX, minY, maxY);
+
+        minX -= cushion;
+        maxX += cushion;
+        minY -= cushion;
+        maxY += cushion;
+
+
+
+        vector<vector<int> > points_in_slices;
+        vector<double> delta_of_slice;
+        points_in_slices.resize(maxX - minX);
+        delta_of_slice.resize(maxX - minX);
+
+        //reprocess contour points into slices - eg put them into vector at their X index
+        for(unsigned j = 0; j < contours.at(i).size(); j++)
+            points_in_slices.at(contours.at(i).at(j).x - minX).push_back(j);
+
+
+
+        //choose to ignore first few slices - mostly vertical and unimportant
+        for(int slice = 5; slice < maxX - minX; slice++){
+
+            //for all points in each slice find minimum distance to any line and save it as delta of the whole slice
+            int minDistance = INT_MAX;
+            for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){
+
+                for (auto it = goodLines.begin(); it != goodLines.end(); ++it){
+
+                    double rho = lines[*it][0], theta = lines[*it][1];
+                    double a = cos(theta), b = sin(theta);
+                    double x0 = a*rho, y0 = b*rho;
+
+                    //contours.at(i).at(contourPoint).x - x0 / -b = k;
+                    //y = y0 + k *(a);
+
+                    unsigned contourPoint = points_in_slices.at(slice).at(point);
+
+                    double k = (contours.at(i).at(contourPoint).x - x0) / -b;
+                    double y = y0 + k * a;
+
+                    double m = y - contours.at(i).at(contourPoint).y;
+
+                    if(abs(m) < abs(minDistance)){
+                        delta_of_slice.at(slice) = m;
+                        minDistance = m;
+                    }
+
+                }//for lines
+
+
+            } //for points in slices
+        } //for slice
+
+
+        //now because there is inevitably some noise in contours and deltas due to thresholding, lack of sharpnes etc.,
+        //run it through linear filter to get rid of some of this noise.
+        vector<double> newDeltaSlice(delta_of_slice.size());
+        filter(delta_of_slice,newDeltaSlice);
+
+
+        //now to get to repairing image.. take each slice again
+        for(int slice = 5; slice < maxX - minX; slice++){
+//				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){        //visualize this too?
+
+            if(abs(newDeltaSlice.at(slice)) < 0.0001f) //floatove porovnavani
+                continue;
+
+                //vizualizace opravenych kontur
 //						unsigned contourPoint = points_in_slices.at(slice).at(point);
 //                        contours.at(i).at(contourPoint).y += newDeltaSlice.at(slice);
-						
-						int src_X = slice + minX;
-						int height = maxY - minY;
 
-                        float delta = newDeltaSlice.at(slice);
-                        float fraction = newDeltaSlice.at(slice);
-                        int wholePart = (int) fraction;
-                        fraction = abs(fraction - wholePart);
-                        float complement = 1 - fraction;
+            int src_X = slice + minX;
+            int height = maxY - minY;
 
-                        //cout << newDeltaSlice.at(slice) << " "<< wholePart <<" "<< fraction << " " << complement << endl;
-						for(int offset = 0; offset < height; offset++){
+            //breaking the delta to whole part and fraction + its complement
+            float delta = newDeltaSlice.at(slice);
+            float fraction = newDeltaSlice.at(slice);
+            int wholePart = (int) fraction;
+            fraction = abs(fraction - wholePart);
+            float complement = 1 - fraction;
 
-                            //above line
-                            if(delta > 0){
-                                src_gray.at<uchar>(maxY + wholePart - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
+            //shift by whole part
+            for(int offset = 0; offset < height; offset++){
 
-                             //below line
-                            } else if (delta < 0){
-                                src_gray.at<uchar>(minY + wholePart + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
-                            }
+                //above line
+                if(delta > 0){
+                    src_gray.at<uchar>(maxY + wholePart - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
 
-                        }
+                 //below line
+                } else if (delta < 0){
+                    src_gray.at<uchar>(minY + wholePart + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
+                }
 
-                        //go through slice once again and fine adjust values..
-                        for(int offset = 0; offset < height; offset++){
+            }
 
-                            //above line
-                            if(delta > 0){
-                                float v1 = complement * src_gray.at<uchar>(maxY - offset, src_X);
-                                float v2 = fraction * src_gray.at<uchar>(maxY - offset - 1, src_X);
-                                float value = v1 + v2;
-                                src_gray.at<uchar>(maxY - offset, src_X) = (uchar) value;
+            //go through slice once again and fine adjust values.. - linear interpolation
+            for(int offset = 0; offset < height; offset++){
 
-                             //below line
-                            } else if (delta < 0){
-                                float v1 = complement * src_gray.at<uchar>(minY + offset, src_X);
-                                float v2 =  fraction * src_gray.at<uchar>(minY + offset + 1, src_X);
-                                float value = v1 + v2;
-                                src_gray.at<uchar>(minY + offset, src_X) = (uchar) value;
-                            }
+                //above line
+                if(delta > 0){
+                    float v1 = complement * src_gray.at<uchar>(maxY - offset, src_X);
+                    float v2 = fraction * src_gray.at<uchar>(maxY - offset - 1, src_X);
+                    float value = v1 + v2;
+                    src_gray.at<uchar>(maxY - offset, src_X) = (uchar) value;
 
-                        }
-					}
-//				}
-//                cerr << delta_of_slice.at(slice) << endl;
-				
-			} // for all slices
-			
-                cerr << "------------------------" << endl;
-            cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
-		
-		//cv::imshow("dst",hough); 
-                //cv::imshow("draw",draw);
-                //cv::waitKey(0);
+                 //below line
+                } else if (delta < 0){
+                    float v1 = complement * src_gray.at<uchar>(minY + offset, src_X);
+                    float v2 =  fraction * src_gray.at<uchar>(minY + offset + 1, src_X);
+                    float value = v1 + v2;
+                    src_gray.at<uchar>(minY + offset, src_X) = (uchar) value;
+                }
 
-		}
+            }
+
+
+        } // for all slices
+
+        cerr << "------------------------" << endl;
+        cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
+
+    //cv::imshow("dst",hough);
+            //cv::imshow("draw",draw);
+            //cv::waitKey(0);
+
+
 		
 	} //for all contours
 	
@@ -291,9 +314,23 @@ int main(int argc, char* argv[]){
 //		cv::drawContours( src_gray, contours, i, cv::Scalar(0,0,255));
 //	}
 	
+
+
+
+
 	//cv::imshow("draw",draw);
-			cv::imshow("dst",src_gray);
+    if(outFile == "")
+        outFile = inFile;
+
+    vector<int> params;
+    params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+    params.push_back(9);
+
+    cv::imwrite("./out/repaired-"+outFile, src_gray, params);
+
+        cv::imshow("dst",src_gray);
 		cv::waitKey(0);
 
 	return 0;
 }
+
