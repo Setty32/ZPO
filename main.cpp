@@ -12,6 +12,7 @@
 #define DEMO
 
 
+
 #define filter_size 13
 
 //sice vyfiltruje trochu sumu, ale pak pokud se neco prudceji zmeni
@@ -42,7 +43,7 @@ void filter(std::vector<double> &input, std::vector<double> &output){
                 result += coeff[j + filterHalf] * (double)input.at(i + j);
             }
         }
-        std::cerr<< input.at(i) <<" " <<  cvRound(result / weight_sum) << std::endl;
+        //std::cerr<< input.at(i) <<" " <<  cvRound(result / weight_sum) << std::endl;
         output.at(i) = result / weight_sum;
 	}
 	
@@ -86,30 +87,73 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
-    const int dir_err = mkdir("./out", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-    if (-1 == dir_err)
-    {
-        printf("Error creating directory!n");
-        exit(1);
+
+
+    struct stat statbuf;
+
+    if (stat("./out", &statbuf) != -1) {
+       if (not S_ISDIR(statbuf.st_mode)) {
+
+           const int dir_err = mkdir("./out", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+           if (-1 == dir_err)
+           {
+               printf("Error creating directory!n");
+               exit(1);
+           }
+       }
     }
+
 
     cv::Mat src = cv::imread( inFile, CV_LOAD_IMAGE_COLOR);
 
-    cerr<< "Input img sizes: " << src.cols << " " << src.rows << endl;
+    //get rid of path at the beginning to keep only filename
+     if(inFile.size() > 2){
+         size_t pos = inFile.rfind("/");
+
+         if(pos != string::npos)
+            inFile.erase(0, pos + 1);
+    }
+
+    //cerr<< "Input img sizes: " << src.cols << " " << src.rows << endl;
 
     //convert input file to greyscale
     cv::Mat src_gray;
 	cv::cvtColor( src, src_gray, CV_BGR2GRAY );
 
+    if( src.cols < src.rows){
+        cv::Mat tmp(src_gray);
+
+        cv::transpose(tmp, src_gray);
+        flip(src_gray, src_gray,1);
+    }
+
     cv::Mat dst = cv::Mat::zeros(src_gray.size(),src_gray.type());
 	
+#ifdef DEMO
+cv::imshow("original", src_gray);
+cv::waitKey();
+
+//helper metrices for visualization
+cv::Mat tmp_draw = cv::Mat::zeros(dst.size(),CV_8UC3);
+cv::Mat tmp_draw2 = cv::Mat::zeros(dst.size(),CV_8UC3);
+cv::Mat tmp_draw3 = cv::Mat::zeros(dst.size(),CV_8UC1);
+cv::Mat tmp_draw4 = cv::Mat::zeros(dst.size(),CV_8UC1);
+#endif
 
     //isolate white areas; dst is binary image now
 	cv::threshold(src_gray,dst,200,255,cv::THRESH_TOZERO);		//JEDEN PARAMETR == PRAH
-	
+
+#ifdef DEMO
+    //after thresholding
+cv::imshow("progress", dst);
+cv::waitKey();
+#endif
 
 	vector<vector<cv::Point> > contours;
 	vector<cv::Vec4i> hierarchy;
+    vector<cv::Vec2f> lines;
+    std::vector<int> goodLines;
+
 
     //find contours of these areas and only outer ones (no inner contours). Stored as points.
 	cv::findContours(dst, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE,cv::Point(0,0));
@@ -121,33 +165,79 @@ int main(int argc, char* argv[]){
 	
     int cushion = 3;    //manipulation space to add to bounding box
 
-    //want to keep 5 biggest contours by point count and cut off everything else..
+    //want to keep at least 5 biggest contours by point count and cut off everything else..
     unsigned threshold = getThreshold3(contours, 4);
 
+#ifdef DEMO
+
+for(unsigned i = 0; i < contours.size(); i++){
+    cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
+}
+
+//show all contours
+cv::imshow("progress", draw);
+cv::waitKey();
+
+draw = cv::Mat::zeros(dst.size(),CV_8UC3);
+
+for(unsigned i = 0; i < contours.size(); i++){
+
+    if(contours.at(i).size() < threshold)
+        continue;
+
+    cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
+}
+
+//and all contours that pass threshold
+cv::imshow("progress", draw);
+cv::waitKey();
+
+
+draw.copyTo(tmp_draw);
+draw.copyTo(tmp_draw2);
+#endif
 
 	for(unsigned i = 0; i < contours.size(); i++){
 
-        //so here we use only those 5 biggest ones
+        cv::Mat hough, tmp; //matrices for finding lines
+
+        //so here we use only those 5+ biggest ones - can be more than 5 - in case of slight rotation of image, border contours are there too
         if(contours.at(i).size() < threshold)
             continue;
 
 
-        draw = cv::Mat::zeros(dst.size(),CV_8UC3);
-        cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
+        tmp = cv::Mat::zeros(dst.size(),CV_8UC3);
+        cv::drawContours( tmp, contours, i, cv::Scalar(0,0,255));
 
-        //imshow draw
 
-        cv::Mat hough;
-        cv::cvtColor( draw, hough, CV_BGR2GRAY );
+        cv::cvtColor( tmp, hough, CV_BGR2GRAY );
 
         bool stop = true;
 
-        vector<cv::Vec2f> lines;
+
         cv::HoughLines(hough,lines, 1, CV_PI/360, 250, 0, 0);	//JEDEN PARAMETR == PRAH
-        draw = cv::Mat::zeros(dst.size(),CV_8UC3);
+        tmp = cv::Mat::zeros(dst.size(),CV_8UC3);
+
+#ifdef DEMO
+
+for(unsigned pp = 0; pp < lines.size(); pp++){
+    float rho = lines[pp][0], theta = lines[pp][1];
+    cv::Point pt1, pt2;
+    double a = cos(theta), b = sin(theta);
+    double x0 = a*rho, y0 = b*rho;
+    pt1.x = cvRound(x0 + 1000*(-b));
+    pt1.y = cvRound(y0 + 1000*(a));
+    pt2.x = cvRound(x0 - 1000*(-b));
+    pt2.y = cvRound(y0 - 1000*(a));
+
+    //all detected lines
+    cv::line( tmp_draw, pt1, pt2, cv::Scalar(255,255,0), 1, CV_AA);
+}
+
+#endif
 
         //in case of multiple detected lines for any contour, select only the "best ones"
-        std::vector<int> goodLines = validLines(contours[i], lines);
+        goodLines = validLines(contours[i], lines);
 
         for (auto it = goodLines.begin(); it != goodLines.end(); ++it){
 
@@ -161,17 +251,19 @@ int main(int argc, char* argv[]){
             pt2.y = cvRound(y0 - 1000*(a));
 
             //filters out fields with lines with more than 45 deg inclination and at top and bottmo 10% of space
-            //probably not really needed anymore..
             if (a < 0.5 && y0 > hough.rows * 0.1 && y0 < hough.rows * 0.9){
-                cv::line( draw, pt1, pt2, cv::Scalar(255,255,0), 1, CV_AA);
-                stop = false;
+                #ifdef DEMO
+                    //all good lines
+                    cv::line( tmp_draw2, pt1, pt2, cv::Scalar(255,255,0), 1, CV_AA);
+
+                #endif
+                stop = false;       //basically is set only for border contours
             }
         } //for lines
 
-        //if no lines or unfit go on.. - again not really necessary now
+        //if no lines or unfit go on..
         if(lines.size() < 1 || stop)
             continue;
-
 
 
         //find out bounding box of contour and inflate it a bit
@@ -239,14 +331,13 @@ int main(int argc, char* argv[]){
 
         //now to get to repairing image.. take each slice again
         for(int slice = 5; slice < maxX - minX; slice++){
-//				for(unsigned point = 0; point < points_in_slices.at(slice).size(); point++){        //visualize this too?
 
+        //v demu to vypada blbe bez casti s deltou 0
+        #ifndef DEMO
             if(abs(newDeltaSlice.at(slice)) < 0.0001f) //floatove porovnavani
                 continue;
+        #endif
 
-                //vizualizace opravenych kontur
-//						unsigned contourPoint = points_in_slices.at(slice).at(point);
-//                        contours.at(i).at(contourPoint).y += newDeltaSlice.at(slice);
 
             int src_X = slice + minX;
             int height = maxY - minY;
@@ -271,6 +362,24 @@ int main(int argc, char* argv[]){
                 }
 
             }
+            #ifdef DEMO
+                for(int offset = 0; offset < height; offset++){
+
+                    //above line
+                    if(delta > 0){
+                        tmp_draw3.at<uchar>(maxY + wholePart - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
+                        tmp_draw4.at<uchar>(maxY + wholePart - offset, src_X) = tmp_draw3.at<uchar>(maxY + wholePart - offset, src_X);
+
+                     //below line
+                    } else if (delta < 0){
+                        tmp_draw3.at<uchar>(minY + wholePart + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
+                        tmp_draw4.at<uchar>(minY + wholePart + offset, src_X) = tmp_draw3.at<uchar>(minY + wholePart + offset, src_X);
+
+                    }
+
+                }
+
+            #endif
 
             //go through slice once again and fine adjust values.. - linear interpolation
             for(int offset = 0; offset < height; offset++){
@@ -290,35 +399,64 @@ int main(int argc, char* argv[]){
                     src_gray.at<uchar>(minY + offset, src_X) = (uchar) value;
                 }
 
+
             }
 
+            #ifdef DEMO
+                for(int offset = 0; offset < height; offset++){
+
+                    //above line
+                    if(delta > 0){
+
+                        tmp_draw4.at<uchar>(maxY - offset, src_X) = src_gray.at<uchar>(maxY - offset, src_X);
+
+                     //below line
+                    } else if (delta < 0){
+
+                        tmp_draw4.at<uchar>(minY + offset, src_X) = src_gray.at<uchar>(minY + offset, src_X);
+                    }
+
+                }
+
+            #endif
 
         } // for all slices
 
-        cerr << "------------------------" << endl;
-        cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
+        //cv::drawContours( draw, contours, i, cv::Scalar(0,0,255));
 
-    //cv::imshow("dst",hough);
-            //cv::imshow("draw",draw);
-            //cv::waitKey(0);
+
 
 
 		
 	} //for all contours
 	
+#ifdef DEMO
+
+    char key = ' ';
+
+    cv::imshow("progress",tmp_draw);
+    cv::waitKey();
+
+    cv::imshow("progress",tmp_draw2);
+    cv::waitKey();
+
+    while(key == ' '){
+        cv::imshow("progress",tmp_draw3);
+        cv::waitKey();
+
+        cv::imshow("progress",tmp_draw4);
+        key = cv::waitKey();
+    }
+
+    cv::imshow("result",src_gray);
+    cv::waitKey();
+#endif
+
+
 	
-	
-//	draw = cv::Mat::zeros(dst.size(),CV_8UC3);
-//	for(unsigned i = 0; i < contours.size(); i++){
-//		if(contours.at(i).size() > 740 /*threshold*/)
-//		cv::drawContours( src_gray, contours, i, cv::Scalar(0,0,255));
-//	}
-	
 
 
 
-
-	//cv::imshow("draw",draw);
     if(outFile == "")
         outFile = inFile;
 
@@ -326,11 +464,8 @@ int main(int argc, char* argv[]){
     params.push_back(CV_IMWRITE_PNG_COMPRESSION);
     params.push_back(9);
 
-    cv::imwrite("./out/repaired-"+outFile, src_gray, params);
+    int code = cv::imwrite("./out/repaired_"+outFile, src_gray, params);
 
-        cv::imshow("dst",src_gray);
-		cv::waitKey(0);
 
-	return 0;
+    return code;
 }
-
